@@ -35,6 +35,7 @@ Rules
 - Follow existing code style, naming conventions, and architectural patterns in the project.
 - Before starting work, fetch first, then ensure dev and dev-auto branches exist (create them if missing). Pull dev and merge it into dev-auto. Review any changes before proceeding.
 - After reviewing changes, update or create the relevant .agents/notes files with context for future reference.
+- If you have questions, write them in .agents/QUESTIONS.md and reference any relevant .agents/notes files.
 - Work on a git branch named with the task slug prefixed by the conventional commit type (e.g., feat-<slug>, fix-<slug>, refactor-<slug>, docs-<slug>, test-<slug>, chore-<slug>).
 - Make the smallest change necessary to complete the task. Avoid unnecessary refactoring unless it's part of the task.
 - If you make a non-obvious technical decision, document the reasoning in the notes file.
