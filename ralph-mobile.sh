@@ -177,9 +177,9 @@ while true; do
 
   # Build prompt
   if [[ -n "$USER_PROMPT" ]]; then
-    PROMPT="## RALPH"$'\n\n'"$(cat "$RALPH_FILE")"$'\n\n'"## Project Description"$'\n\n'"$(cat "$DESCRIPTION_FILE")"$'\n\n'"## USER-PROMPT"$'\n\n'"$USER_PROMPT"
+    PROMPT="$(cat "$RALPH_FILE")"$'\n\n'"$(cat "$DESCRIPTION_FILE")"$'\n\n'"$USER_PROMPT"
   else
-    PROMPT="## RALPH"$'\n\n'"$(cat "$RALPH_FILE")"$'\n\n'"## Project Description"$'\n\n'"$(cat "$DESCRIPTION_FILE")"$'\n\n'"## TASKS"$'\n\n'"$(cat "$TASKS_FILE")"
+    PROMPT="$(cat "$RALPH_FILE")"$'\n\n'"$(cat "$DESCRIPTION_FILE")"$'\n\n'"$(cat "$TASKS_FILE")"
   fi
 
   # Create new session
@@ -197,10 +197,16 @@ while true; do
 
   # Listen for SSE events
   STATUS="UNFINISHED"
-  OUTPUT_BUFFER=""
+  CONTEXT_DATE=$(date +%Y-%m-%d-%H-%M-%S)
+  CONTEXT_FILE="$ROOT_DIR/.agents/contexts/${CONTEXT_SLUG}-${CONTEXT_DATE}-context.json"
+
   while IFS= read -r line; do
     if [[ "$line" == data:* ]]; then
       DATA="${line#data:}"
+
+      # Append raw JSON to context file
+      printf "%s\n" "$DATA" >> "$CONTEXT_FILE"
+
       EVENT_TYPE=$(echo "$DATA" | jq -r '.type // empty' 2>/dev/null) || continue
 
       # Handle text output
@@ -218,7 +224,14 @@ while true; do
             if [[ "$TEXT_TRIMMED" == "<status>DONE</status>" ]]; then
               STATUS="DONE"
             fi
-            OUTPUT_BUFFER+="$TEXT"$'\n'
+          fi
+        elif [[ "$PART_SESSION" == "$SESSION_ID" && "$PART_TYPE" == "tool" ]]; then
+          # Display tool usage for visibility
+          TOOL=$(echo "$DATA" | jq -r '.properties.part.tool // empty' 2>/dev/null) || true
+          TITLE=$(echo "$DATA" | jq -r '.properties.part.state.title // empty' 2>/dev/null) || true
+          TOOL_STATUS=$(echo "$DATA" | jq -r '.properties.part.state.status // empty' 2>/dev/null) || true
+          if [[ -n "$TOOL" && "$TOOL_STATUS" == "completed" ]]; then
+            printf "[%s] %s\n" "$TOOL" "$TITLE"
           fi
         fi
       fi
@@ -232,10 +245,6 @@ while true; do
       fi
     fi
   done < <(curl -s -N "$BASE_URL/event")
-
-  CONTEXT_DATE=$(date +%Y-%m-%d-%H-%M-%S)
-  CONTEXT_FILE="$ROOT_DIR/.agents/contexts/${CONTEXT_SLUG}-${CONTEXT_DATE}-context.txt"
-  printf "%s\n\n%s" "$PROMPT" "$OUTPUT_BUFFER" > "$CONTEXT_FILE"
 
   # Check exit conditions
   if [[ "$STATUS" == "DONE" ]]; then

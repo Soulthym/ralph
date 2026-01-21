@@ -93,26 +93,40 @@ while true; do
     CONTEXT_SLUG="prompt"
   fi
   if [[ -n "$USER_PROMPT" ]]; then
-    PROMPT="## RALPH"$'\n\n'"$(cat "$RALPH_FILE")"$'\n\n'"## Project Description"$'\n\n'"$(cat "$DESCRIPTION_FILE")"$'\n\n'"## USER-PROMPT"$'\n\n'"$USER_PROMPT"
+    PROMPT="$(cat "$RALPH_FILE")"$'\n\n'"$(cat "$DESCRIPTION_FILE")"$'\n\n'"$USER_PROMPT"
   else
-    PROMPT="## RALPH"$'\n\n'"$(cat "$RALPH_FILE")"$'\n\n'"## Project Description"$'\n\n'"$(cat "$DESCRIPTION_FILE")"$'\n\n'"## TASKS"$'\n\n'"$(cat "$TASKS_FILE")"
+    PROMPT="$(cat "$RALPH_FILE")"$'\n\n'"$(cat "$DESCRIPTION_FILE")"$'\n\n'"$(cat "$TASKS_FILE")"
   fi
 
   STATUS="UNFINISHED"
-  OUTPUT_BUFFER=""
-  while IFS= read -r line; do
-    printf "%s\n" "$line"
-    # Strip whitespace before comparing
-    LINE_TRIMMED=$(echo "$line" | xargs)
-    if [[ "$LINE_TRIMMED" == "<status>DONE</status>" ]]; then
-      STATUS="DONE"
-    fi
-    OUTPUT_BUFFER+="$line"$'\n'
-  done < <(printf "%s" "$PROMPT" | opencode run)
-
   CONTEXT_DATE=$(date +%Y-%m-%d-%H-%M-%S)
-  CONTEXT_FILE="$ROOT_DIR/.agents/contexts/${CONTEXT_SLUG}-${CONTEXT_DATE}-context.txt"
-  printf "%s\n\n%s" "$PROMPT" "$OUTPUT_BUFFER" > "$CONTEXT_FILE"
+  CONTEXT_FILE="$ROOT_DIR/.agents/contexts/${CONTEXT_SLUG}-${CONTEXT_DATE}-context.json"
+
+  # Run opencode with JSON output to capture full context
+  while IFS= read -r line; do
+    # Append raw JSON to context file
+    printf "%s\n" "$line" >> "$CONTEXT_FILE"
+
+    # Parse JSON to extract text for display and status check
+    EVENT_TYPE=$(echo "$line" | jq -r '.type // empty' 2>/dev/null) || true
+    if [[ "$EVENT_TYPE" == "text" ]]; then
+      TEXT=$(echo "$line" | jq -r '.part.text // empty' 2>/dev/null) || true
+      if [[ -n "$TEXT" ]]; then
+        printf "%s\n" "$TEXT"
+        TEXT_TRIMMED=$(echo "$TEXT" | xargs)
+        if [[ "$TEXT_TRIMMED" == "<status>DONE</status>" ]]; then
+          STATUS="DONE"
+        fi
+      fi
+    elif [[ "$EVENT_TYPE" == "tool_use" ]]; then
+      # Display tool usage for visibility
+      TOOL=$(echo "$line" | jq -r '.part.tool // empty' 2>/dev/null) || true
+      TITLE=$(echo "$line" | jq -r '.part.state.title // empty' 2>/dev/null) || true
+      if [[ -n "$TOOL" ]]; then
+        printf "[%s] %s\n" "$TOOL" "$TITLE"
+      fi
+    fi
+  done < <(printf "%s" "$PROMPT" | opencode run --format json)
 
   if [[ "$STATUS" == "DONE" ]]; then
     break
