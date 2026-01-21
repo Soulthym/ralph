@@ -2,9 +2,16 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MAX_ITERATIONS=10
+
 RALPH_FILE="$ROOT_DIR/.agents/RALPH.md"
 DESCRIPTION_FILE="$ROOT_DIR/.agents/DESCRIPTION.md"
 TASKS_FILE="$ROOT_DIR/.agents/TASKS.md"
+
+if [[ $# -gt 0 && "$1" =~ ^[0-9]+$ ]]; then
+  MAX_ITERATIONS="$1"
+  shift
+fi
 
 USER_PROMPT=""
 if [[ $# -gt 0 ]]; then
@@ -34,7 +41,9 @@ if [[ ! -f "$TASKS_FILE" ]]; then
 EOF
 fi
 
+ITERATION=0
 while true; do
+  ((ITERATION++))
   if [[ -n "$USER_PROMPT" ]]; then
     PROMPT="$(cat "$RALPH_FILE")"$'\n\n'"$(cat "$DESCRIPTION_FILE")"$'\n\n'"$USER_PROMPT"
   else
@@ -50,6 +59,11 @@ while true; do
   done < <(printf "%s" "$PROMPT" | opencode run)
 
   if [[ "$STATUS" == "DONE" ]]; then
+    break
+  fi
+
+  if [[ "$ITERATION" -ge "$MAX_ITERATIONS" ]]; then
+    echo "Reached maximum iterations ($MAX_ITERATIONS)"
     break
   fi
 done
