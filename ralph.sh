@@ -65,7 +65,7 @@ fi
 
 ITERATION=0
 while true; do
-  ((ITERATION++))
+  ((ITERATION++)) || true
   if [[ -n "$USER_PROMPT" ]]; then
     PROMPT="$(cat "$RALPH_FILE")"$'\n\n'"$(cat "$DESCRIPTION_FILE")"$'\n\n'"$USER_PROMPT"
   else
