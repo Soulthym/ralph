@@ -9,6 +9,7 @@ DESCRIPTION_FILE="$ROOT_DIR/.agents/DESCRIPTION.md"
 TASKS_FILE="$ROOT_DIR/.agents/TASKS.md"
 
 mkdir -p "$ROOT_DIR/.agents/notes"
+mkdir -p "$ROOT_DIR/.agents/contexts"
 
 if [[ $# -gt 0 && "$1" =~ ^[0-9]+$ ]]; then
   MAX_ITERATIONS="$1"
@@ -27,7 +28,7 @@ if [[ ! -f "$RALPH_FILE" ]]; then
 # RALPH.md
 
 Rules
-- Read the .agents/TASKS.md file, pick an unfinished task if any, otherwise pick the most important task and start working on it.
+- Read the .agents/TASKS.md file, pick an unfinished task if any, otherwise pick the most important task. Mark it as WIP before starting work and write the slug to .agents/WIP.md.
 - Each task must have a Slug. Choose a short, unique slug and write it into its corresponding TASKS.md if missing.
 - Notes live at .agents/notes/<slug>-notes.md.
 - Maintain the current task notes file yourself. Add concise insights when they help future iterations, or things you may need later.
@@ -49,6 +50,7 @@ Rules
 Task format (for .agents/TASKS.md)
 ```
 Task: <summary>
+Status: <TODO|WIP|DONE>
 Slug: <slug-for-notes-file>
 Notes:
 - .agents/notes/<slug>-notes.md
@@ -162,11 +164,21 @@ ITERATION=0
 while true; do
   ((ITERATION++)) || true
 
+  # Read the slug from WIP.md (written by ralph when picking a task)
+  CONTEXT_SLUG=""
+  WIP_FILE="$ROOT_DIR/.agents/WIP.md"
+  if [[ -f "$WIP_FILE" ]]; then
+    CONTEXT_SLUG=$(cat "$WIP_FILE" | xargs)
+  fi
+  if [[ -z "$CONTEXT_SLUG" ]]; then
+    CONTEXT_SLUG="prompt"
+  fi
+
   # Build prompt
   if [[ -n "$USER_PROMPT" ]]; then
-    PROMPT="$(cat "$RALPH_FILE")"$'\n\n'"$(cat "$DESCRIPTION_FILE")"$'\n\n'"$USER_PROMPT"
+    PROMPT="## RALPH"$'\n\n'"$(cat "$RALPH_FILE")"$'\n\n'"## Project Description"$'\n\n'"$(cat "$DESCRIPTION_FILE")"$'\n\n'"## USER-PROMPT"$'\n\n'"$USER_PROMPT"
   else
-    PROMPT="$(cat "$RALPH_FILE")"$'\n\n'"$(cat "$DESCRIPTION_FILE")"$'\n\n'"$(cat "$TASKS_FILE")"
+    PROMPT="## RALPH"$'\n\n'"$(cat "$RALPH_FILE")"$'\n\n'"## Project Description"$'\n\n'"$(cat "$DESCRIPTION_FILE")"$'\n\n'"## TASKS"$'\n\n'"$(cat "$TASKS_FILE")"
   fi
 
   # Create new session
@@ -184,6 +196,7 @@ while true; do
 
   # Listen for SSE events
   STATUS="UNFINISHED"
+  OUTPUT_BUFFER=""
   while IFS= read -r line; do
     if [[ "$line" == data:* ]]; then
       DATA="${line#data:}"
@@ -204,6 +217,7 @@ while true; do
             if [[ "$TEXT_TRIMMED" == "<status>DONE</status>" ]]; then
               STATUS="DONE"
             fi
+            OUTPUT_BUFFER+="$TEXT"$'\n'
           fi
         fi
       fi
@@ -217,6 +231,10 @@ while true; do
       fi
     fi
   done < <(curl -s -N "$BASE_URL/event")
+
+  CONTEXT_DATE=$(date +%Y-%m-%d-%H-%M-%S)
+  CONTEXT_FILE="$ROOT_DIR/.agents/contexts/${CONTEXT_SLUG}-${CONTEXT_DATE}-context.txt"
+  printf "%s\n\n%s" "$PROMPT" "$OUTPUT_BUFFER" > "$CONTEXT_FILE"
 
   # Check exit conditions
   if [[ "$STATUS" == "DONE" ]]; then
