@@ -32,8 +32,12 @@ Rules
 - Notes live at .agents/notes/<slug>-notes.md.
 - Maintain the current task notes file yourself. Add concise insights when they help future iterations, or things you may need later.
 - If the task is unfinished but you're running out of context, mark it as WIP in TASKS.md, leave remaining instructions and useful context in the notes file.
-- Before marking a task complete, run tests present in the CI if any, otherwise run available test commands.
-- Before marking a task complete, run formatters/linters if the project has them configured.
+- Follow existing code style, naming conventions, and architectural patterns in the project.
+- Make the smallest change necessary to complete the task. Avoid unnecessary refactoring unless it's part of the task.
+- If you make a non-obvious technical decision, document the reasoning in the notes file.
+- Before marking a task complete, run tests present in the CI if any, otherwise run available test commands. If tests fail, fix the issues before marking complete.
+- Before marking a task complete, run formatters/linters if the project has them configured. If they fail, fix the issues before marking complete.
+- Commit your changes after completing each task using conventional commit format (e.g., feat:, fix:, refactor:, docs:, test:, chore:). Do not push. Use --no-gpg-sign when committing.
 - When you finish a task, remove it from TASKS.md and write a concise summary of what you did in the notes file.
 - Once the TASKS.md has no tasks left, output on a single line: "DONE"
 
