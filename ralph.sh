@@ -28,7 +28,8 @@ if [[ ! -f "$RALPH_FILE" ]]; then
 # RALPH.md
 
 Rules
-- Read the .agents/TASKS.md file, pick an unfinished task if any, otherwise pick the most important task. Mark it as WIP before starting work and write the slug to .agents/WIP.md.
+- Read all relevant .md files in .agents/ (TASKS.md, WIP.md) to understand the current state.
+- Pick an unfinished task if any, otherwise pick the most important task. Mark it as WIP before starting work and write the slug to .agents/WIP.md.
 - Each task must have a Slug. Choose a short, unique slug and write it into its corresponding TASKS.md if missing.
 - Notes live at .agents/notes/<slug>-notes.md.
 - Maintain the current task notes file yourself. Add concise insights when they help future iterations, or things you may need later.
