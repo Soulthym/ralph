@@ -47,8 +47,13 @@ Notes:
 EOF
 fi
 
-if [[ ! -f "$DESCRIPTION_FILE" ]]; then
-  touch "$DESCRIPTION_FILE"
+if [[ ! -f "$DESCRIPTION_FILE" ]] || [[ ! -s "$DESCRIPTION_FILE" ]]; then
+  echo "Analyzing codebase to generate project description..."
+  DESCRIPTION_PROMPT="Analyze this codebase and write a concise project description (1-2 paragraphs). Include: what the project does, main technologies used, and key components. Output only the description text, nothing else."
+  if [[ -n "$USER_PROMPT" ]]; then
+    DESCRIPTION_PROMPT="$DESCRIPTION_PROMPT"$'\n\n'"Additional context from user: $USER_PROMPT"
+  fi
+  printf "%s" "$DESCRIPTION_PROMPT" | opencode run > "$DESCRIPTION_FILE"
 fi
 
 if [[ ! -f "$TASKS_FILE" ]]; then
