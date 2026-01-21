@@ -39,7 +39,7 @@ Rules
 - Before marking a task complete, run formatters/linters if the project has them configured. If they fail, fix the issues before marking complete.
 - Commit your changes after completing each task using conventional commit format (e.g., feat:, fix:, refactor:, docs:, test:, chore:). Do not push. Use --no-gpg-sign when committing.
 - When you finish a task, remove it from TASKS.md and write a concise summary of what you did in the notes file.
-- Once the TASKS.md has no tasks left, output on a single line: "DONE"
+- Once the TASKS.md has no tasks left, output on a single line: "<status>DONE</status>"
 
 Task format (for .agents/TASKS.md)
 ```
@@ -84,9 +84,9 @@ while true; do
   STATUS="UNFINISHED"
   while IFS= read -r line; do
     printf "%s\n" "$line"
-    # Strip whitespace before comparing to handle "DONE " or " DONE"
+    # Strip whitespace before comparing
     LINE_TRIMMED=$(echo "$line" | xargs)
-    if [[ "$LINE_TRIMMED" == "DONE" ]]; then
+    if [[ "$LINE_TRIMMED" == "<status>DONE</status>" ]]; then
       STATUS="DONE"
     fi
   done < <(printf "%s" "$PROMPT" | opencode run)
