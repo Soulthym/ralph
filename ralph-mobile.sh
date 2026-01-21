@@ -194,7 +194,9 @@ while true; do
           if [[ -n "$HAS_END" ]]; then
             TEXT=$(echo "$DATA" | jq -r '.properties.part.text // empty' 2>/dev/null) || continue
             printf "%s\n" "$TEXT"
-            if [[ "$TEXT" == "DONE" ]]; then
+            # Strip whitespace before comparing to handle "DONE " or " DONE"
+            TEXT_TRIMMED=$(echo "$TEXT" | xargs)
+            if [[ "$TEXT_TRIMMED" == "DONE" ]]; then
               STATUS="DONE"
             fi
           fi

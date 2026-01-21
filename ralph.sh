@@ -84,7 +84,9 @@ while true; do
   STATUS="UNFINISHED"
   while IFS= read -r line; do
     printf "%s\n" "$line"
-    if [[ "$line" == "DONE" ]]; then
+    # Strip whitespace before comparing to handle "DONE " or " DONE"
+    LINE_TRIMMED=$(echo "$line" | xargs)
+    if [[ "$LINE_TRIMMED" == "DONE" ]]; then
       STATUS="DONE"
     fi
   done < <(printf "%s" "$PROMPT" | opencode run)
