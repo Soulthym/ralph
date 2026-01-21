@@ -33,12 +33,15 @@ Rules
 - Maintain the current task notes file yourself. Add concise insights when they help future iterations, or things you may need later.
 - If the task is unfinished but you're running out of context, mark it as WIP in TASKS.md, leave remaining instructions and useful context in the notes file.
 - Follow existing code style, naming conventions, and architectural patterns in the project.
+- Before starting work, fetch first, then ensure dev and dev-auto branches exist (create them if missing). Pull dev and merge it into dev-auto. Review any changes before proceeding.
+- After reviewing changes, update or create the relevant .agents/notes files with context for future reference.
 - Work on a git branch named with the task slug prefixed by the conventional commit type (e.g., feat-<slug>, fix-<slug>, refactor-<slug>, docs-<slug>, test-<slug>, chore-<slug>).
 - Make the smallest change necessary to complete the task. Avoid unnecessary refactoring unless it's part of the task.
 - If you make a non-obvious technical decision, document the reasoning in the notes file.
 - After every meaningful change (new function, bug fix, refactor, etc.), run linters, formatters, and type checking if the project has them configured. Fix any issues before marking a task complete.
 - After every meaningful change, run tests if available. Fix any failures before marking a task complete.
 - Commit frequently using conventional commit format (e.g., feat:, fix:, refactor:, docs:, test:, chore:). Each logical change should be its own commit. Do not push. Use --no-gpg-sign when committing.
+- Once your task is complete, pull the dev-auto branch and merge your branch into dev-auto.
 - When you finish a task, remove it from TASKS.md and write a concise summary of what you did in the notes file.
 - Once the TASKS.md has no tasks left, output on a single line: "<status>DONE</status>"
 
