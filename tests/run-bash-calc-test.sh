@@ -3,8 +3,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEST_DIR="$SCRIPT_DIR/bash-calc"
-RALPH_SCRIPT="$SCRIPT_DIR/../ralph-mobile.sh"
+RALPH_SCRIPT="$SCRIPT_DIR/../ralph.sh"
 LOG_FILE="$SCRIPT_DIR/bash-calc-test.log"
+USE_MOBILE=false
 
 cleanup() {
   rm -rf "$TEST_DIR"
@@ -13,8 +14,23 @@ cleanup() {
 
 # Cleanup on exit (unless --keep is passed)
 KEEP=false
-if [[ "${1:-}" == "--keep" ]]; then
-  KEEP=true
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --keep)
+      KEEP=true
+      shift
+      ;;
+    --mobile)
+      USE_MOBILE=true
+      shift
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+if [[ "$USE_MOBILE" == "true" ]]; then
+  RALPH_SCRIPT="$SCRIPT_DIR/../ralph-mobile.sh"
 fi
 if [[ "$KEEP" == "false" ]]; then
   trap cleanup EXIT
@@ -76,7 +92,11 @@ git checkout -b dev
 git checkout -b dev-auto
 
 # Run ralph (output to both terminal and log file)
-echo "Running ralph mobile..."
+if [[ "$USE_MOBILE" == "true" ]]; then
+  echo "Running ralph mobile..."
+else
+  echo "Running ralph..."
+fi
 "$RALPH_SCRIPT" -m "opencode/grok-code" 5 2>&1 | tee "$LOG_FILE"
 
 # Verify results

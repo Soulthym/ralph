@@ -4,10 +4,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEST_DIR="$SCRIPT_DIR/ralph-hello"
 RALPH_SCRIPT="$SCRIPT_DIR/../ralph.sh"
-RALPH_MOBILE_SCRIPT="$SCRIPT_DIR/../ralph-mobile.sh"
 LOG_FILE="$SCRIPT_DIR/ralph-hello-test.log"
 MODEL="opencode/grok-code"
 PROMPT="read README and say hello"
+USE_MOBILE=false
 
 cleanup() {
   rm -rf "$TEST_DIR"
@@ -16,8 +16,23 @@ cleanup() {
 
 # Cleanup on exit (unless --keep is passed)
 KEEP=false
-if [[ "${1:-}" == "--keep" ]]; then
-  KEEP=true
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --keep)
+      KEEP=true
+      shift
+      ;;
+    --mobile)
+      USE_MOBILE=true
+      shift
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+if [[ "$USE_MOBILE" == "true" ]]; then
+  RALPH_SCRIPT="$SCRIPT_DIR/../ralph-mobile.sh"
 fi
 if [[ "$KEEP" == "false" ]]; then
   trap cleanup EXIT
@@ -43,15 +58,12 @@ git commit --no-gpg-sign -m "chore: initial commit"
 git checkout -b dev
 git checkout -b dev-auto
 
-# Run ralph.sh
-echo "Running ralph..."
+if [[ "$USE_MOBILE" == "true" ]]; then
+  echo "Running ralph mobile..."
+else
+  echo "Running ralph..."
+fi
 "$RALPH_SCRIPT" -m "$MODEL" 1 "$PROMPT" 2>&1 | tee "$LOG_FILE"
-
-rm -rf "$TEST_DIR/.agents"
-
-# Run ralph-mobile.sh
-echo "Running ralph mobile..."
-"$RALPH_MOBILE_SCRIPT" -m "$MODEL" 1 "$PROMPT" 2>&1 | tee -a "$LOG_FILE"
 
 if [[ "$KEEP" == "true" ]]; then
   echo ""
