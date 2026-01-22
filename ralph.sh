@@ -20,6 +20,7 @@ SELECTED_MODEL=""
 USER_PROMPT=""
 ITERATION_SET="false"
 PROMPT_ARGS=()
+MODEL_PROVIDED_BY_ARG="false"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -36,6 +37,7 @@ while [[ $# -gt 0 ]]; do
         exit 1
       fi
       SELECTED_MODEL="$2"
+      MODEL_PROVIDED_BY_ARG="true"
       shift 2
       ;;
     *)
@@ -125,7 +127,9 @@ fi
 
 MODEL_ARGS=()
 if [[ -n "$SELECTED_MODEL" ]]; then
-  echo "Using model: $SELECTED_MODEL"
+  if [[ "$MODEL_PROVIDED_BY_ARG" == "false" ]]; then
+    echo "Using model: $SELECTED_MODEL" >&2
+  fi
   MODEL_ARGS=(--model "$SELECTED_MODEL")
 fi
 
