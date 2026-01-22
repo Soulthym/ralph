@@ -11,16 +11,124 @@ TASKS_FILE="$ROOT_DIR/.agents/TASKS.md"
 mkdir -p "$ROOT_DIR/.agents/notes"
 mkdir -p "$ROOT_DIR/.agents/contexts"
 
-if [[ $# -gt 0 && "$1" =~ ^[0-9]+$ ]]; then
-  MAX_ITERATIONS="$1"
-  shift
+if ! command -v jq >/dev/null 2>&1; then
+  echo "jq is required; install jq to run this script." >&2
+  exit 1
 fi
 
+SELECTED_MODEL=""
 USER_PROMPT=""
-if [[ $# -gt 0 ]]; then
-  USER_PROMPT="$*"
+ITERATION_SET="false"
+PROMPT_ARGS=()
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --)
+      shift
+      if [[ $# -gt 0 ]]; then
+        PROMPT_ARGS+=("$@")
+      fi
+      break
+      ;;
+    --model|-m)
+      if [[ $# -lt 2 ]]; then
+        echo "Missing value for $1" >&2
+        exit 1
+      fi
+      SELECTED_MODEL="$2"
+      shift 2
+      ;;
+    *)
+      if [[ "$1" =~ ^[0-9]+$ && "$ITERATION_SET" == "false" ]]; then
+        MAX_ITERATIONS="$1"
+        ITERATION_SET="true"
+        shift
+      else
+        PROMPT_ARGS+=("$@")
+        break
+      fi
+      ;;
+  esac
+done
+
+if [[ ${#PROMPT_ARGS[@]} -gt 0 ]]; then
+  USER_PROMPT="${PROMPT_ARGS[*]}"
 elif [[ ! -t 0 ]]; then
   USER_PROMPT="$(cat)"
+fi
+
+select_model() {
+  local state_dir model_state_file selection
+  local -a recent_models favorite_models all_models ordered_models remaining_models
+  declare -A seen
+
+  state_dir="${XDG_STATE_HOME:-$HOME/.local/state}"
+  model_state_file="$state_dir/opencode/model.json"
+
+  recent_models=()
+  favorite_models=()
+  if [[ -f "$model_state_file" ]]; then
+    mapfile -t recent_models < <(jq -r '.recent[]? | "\(.providerID)/\(.modelID)"' "$model_state_file")
+    mapfile -t favorite_models < <(jq -r '.favorite[]? | "\(.providerID)/\(.modelID)"' "$model_state_file")
+  fi
+
+  mapfile -t all_models < <(opencode models)
+
+  ordered_models=()
+  for model in "${recent_models[@]}"; do
+    if [[ -n "$model" && -z "${seen[$model]+x}" ]]; then
+      ordered_models+=("$model")
+      seen["$model"]=1
+    fi
+  done
+
+  for model in "${favorite_models[@]}"; do
+    if [[ -n "$model" && -z "${seen[$model]+x}" ]]; then
+      ordered_models+=("$model")
+      seen["$model"]=1
+    fi
+  done
+
+  remaining_models=()
+  for model in "${all_models[@]}"; do
+    if [[ -n "$model" && -z "${seen[$model]+x}" ]]; then
+      remaining_models+=("$model")
+      seen["$model"]=1
+    fi
+  done
+
+  if [[ ${#remaining_models[@]} -gt 0 ]]; then
+    mapfile -t remaining_models < <(printf '%s\n' "${remaining_models[@]}" | sort)
+    ordered_models+=("${remaining_models[@]}")
+  fi
+
+  if [[ ${#ordered_models[@]} -eq 0 ]]; then
+    echo "No models available; check opencode configuration." >&2
+    exit 1
+  fi
+
+  selection=$(printf '%s\n' "${ordered_models[@]}" | fzf --prompt="Select model: ")
+  if [[ -z "$selection" ]]; then
+    echo "No model selected; exiting." >&2
+    exit 1
+  fi
+  printf '%s' "$selection"
+}
+
+if [[ -z "$SELECTED_MODEL" ]]; then
+  if ! command -v fzf >/dev/null 2>&1; then
+    echo "fzf is required for model selection; install fzf or pass --model to skip the menu." >&2
+    exit 1
+  fi
+  SELECTED_MODEL="$(select_model)"
+fi
+
+MODEL_PROVIDER=""
+MODEL_ID=""
+if [[ -n "$SELECTED_MODEL" ]]; then
+  echo "Using model: $SELECTED_MODEL"
+  MODEL_PROVIDER="${SELECTED_MODEL%%/*}"
+  MODEL_ID="${SELECTED_MODEL#*/}"
 fi
 
 if [[ ! -f "$RALPH_FILE" ]]; then
@@ -125,9 +233,14 @@ if [[ ! -f "$DESCRIPTION_FILE" ]] || [[ ! -s "$DESCRIPTION_FILE" ]]; then
   ESCAPED_DESC_PROMPT=$(printf '%s' "$DESCRIPTION_PROMPT" | jq -Rs .)
 
   # Send prompt
+  REQUEST_BODY="{\"parts\": [{\"type\": \"text\", \"text\": $ESCAPED_DESC_PROMPT}]"
+  if [[ -n "$MODEL_PROVIDER" ]]; then
+    REQUEST_BODY+=", \"model\": {\"providerID\": \"${MODEL_PROVIDER}\", \"modelID\": \"${MODEL_ID}\"}"
+  fi
+  REQUEST_BODY+="}"
   curl -s -X POST "$BASE_URL/session/$DESC_SESSION_ID/message" \
     -H "Content-Type: application/json" \
-    -d "{\"parts\": [{\"type\": \"text\", \"text\": $ESCAPED_DESC_PROMPT}]}" >/dev/null &
+    -d "$REQUEST_BODY" >/dev/null &
 
   # Listen for SSE events and capture text output
   DESCRIPTION_TEXT=""
@@ -183,9 +296,14 @@ while true; do
   ESCAPED_PROMPT=$(printf '%s' "$PROMPT" | jq -Rs .)
 
   # Send prompt
+  REQUEST_BODY="{\"parts\": [{\"type\": \"text\", \"text\": $ESCAPED_PROMPT}]"
+  if [[ -n "$MODEL_PROVIDER" ]]; then
+    REQUEST_BODY+=", \"model\": {\"providerID\": \"${MODEL_PROVIDER}\", \"modelID\": \"${MODEL_ID}\"}"
+  fi
+  REQUEST_BODY+="}"
   curl -s -X POST "$BASE_URL/session/$SESSION_ID/message" \
     -H "Content-Type: application/json" \
-    -d "{\"parts\": [{\"type\": \"text\", \"text\": $ESCAPED_PROMPT}]}" >/dev/null &
+    -d "$REQUEST_BODY" >/dev/null &
 
   # Listen for SSE events
   STATUS="UNFINISHED"
