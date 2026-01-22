@@ -155,8 +155,8 @@ Rules
 - After every meaningful change, run tests if available. Fix any failures before marking a task complete.
 - Commit frequently using conventional commit format (e.g., feat:, fix:, refactor:, docs:, test:, chore:). Each logical change should be its own commit. Do not push. Use --no-gpg-sign when committing.
 - Once your task is complete, pull the dev-auto branch and merge your branch into dev-auto.
-- When you finish a task: remove it from TASKS.md, write a concise summary in the notes file, then output on a single line: "<status>TASK_COMPLETE</status>"
-- Once the TASKS.md has no tasks left (after completing the final task's notes), output on a single line: "<status>DONE</status>"
+- When you finish a task: remove it from TASKS.md, write a concise summary in the notes file, then output "<status>TASK_COMPLETE</status>" three times, each on its own line.
+- Once the TASKS.md has no tasks left (after completing the final task's notes), output "<status>DONE</status>" three times, each on its own line.
 
 Task format (for .agents/TASKS.md)
 ```
