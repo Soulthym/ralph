@@ -192,6 +192,42 @@ fi
 
 WIP_FILE="$ROOT_DIR/.agents/WIP.md"
 
+update_status_from_text() {
+  local lower
+  lower="${1,,}"
+  if [[ "$lower" == *"<status>task_complete</status>"* ]]; then
+    STATUS="TASK_COMPLETE"
+  elif [[ "$lower" == *"<status>done</status>"* ]]; then
+    STATUS="DONE"
+  fi
+}
+
+append_text_chunk() {
+  local chunk="$1"
+  if [[ -n "$chunk" ]]; then
+    TEXT_BUFFER+="$chunk"
+    update_status_from_text "$TEXT_BUFFER"
+  fi
+}
+
+flush_text_lines() {
+  local line
+  while [[ "$TEXT_BUFFER" == *$'\n'* ]]; do
+    line="${TEXT_BUFFER%%$'\n'*}"
+    printf "%s\n" "$line"
+    update_status_from_text "$line"
+    TEXT_BUFFER="${TEXT_BUFFER#*$'\n'}"
+  done
+}
+
+flush_text_remaining() {
+  if [[ -n "$TEXT_BUFFER" ]]; then
+    printf "%s\n" "$TEXT_BUFFER"
+    update_status_from_text "$TEXT_BUFFER"
+    TEXT_BUFFER=""
+  fi
+}
+
 ITERATION=0
 while true; do
   ((ITERATION++)) || true
@@ -203,6 +239,8 @@ while true; do
   fi
 
   STATUS="UNFINISHED"
+  TEXT_BUFFER=""
+  declare -A PRINTED_PARTS=()
   CONTEXT_DATE=$(date +%Y-%m-%d-%H-%M-%S)
   # Create context file with date-only name, will rename after iteration
   TEMP_CONTEXT_FILE="$ROOT_DIR/.agents/contexts/${CONTEXT_DATE}-context.json"
@@ -215,17 +253,28 @@ while true; do
     # Parse JSON to extract text for display and status check
     EVENT_TYPE=$(echo "$line" | jq -r '.type // empty' 2>/dev/null) || true
     if [[ "$EVENT_TYPE" == "text" ]]; then
-      TEXT=$(echo "$line" | jq -r '.part.text // empty' 2>/dev/null) || true
-      if [[ -n "$TEXT" ]]; then
-        printf "%s\n" "$TEXT"
-        TEXT_TRIMMED=$(echo "$TEXT" | xargs)
-        if [[ "$TEXT_TRIMMED" == "<status>TASK_COMPLETE</status>" ]]; then
-          STATUS="TASK_COMPLETE"
-        elif [[ "$TEXT_TRIMMED" == "<status>DONE</status>" ]]; then
-          STATUS="DONE"
+      PART_ID=$(echo "$line" | jq -r '.part.id // empty' 2>/dev/null) || true
+      TEXT_DELTA=$(echo "$line" | jq -r '.part.delta // .delta // empty' 2>/dev/null) || true
+      if [[ -n "$TEXT_DELTA" ]]; then
+        append_text_chunk "$TEXT_DELTA"
+        flush_text_lines
+      else
+        TEXT=$(echo "$line" | jq -r '.part.text // empty' 2>/dev/null) || true
+        if [[ -n "$TEXT" ]]; then
+          if [[ -n "$PART_ID" ]]; then
+            if [[ -z "${PRINTED_PARTS[$PART_ID]+x}" ]]; then
+              PRINTED_PARTS["$PART_ID"]=1
+              append_text_chunk "$TEXT"
+              flush_text_lines
+            fi
+          else
+            append_text_chunk "$TEXT"
+            flush_text_lines
+          fi
         fi
       fi
     elif [[ "$EVENT_TYPE" == "tool_use" ]]; then
+      flush_text_lines
       # Display tool usage for visibility
       TOOL=$(echo "$line" | jq -r '.part.tool // empty' 2>/dev/null) || true
       TITLE=$(echo "$line" | jq -r '.part.state.title // empty' 2>/dev/null) || true
@@ -233,7 +282,10 @@ while true; do
         printf "[%s] %s\n" "$TOOL" "$TITLE"
       fi
     fi
+    flush_text_lines
   done < <(printf "%s" "$PROMPT" | opencode run "${MODEL_ARGS[@]}" --format json)
+
+  flush_text_remaining
 
   # Read slug from WIP.md (written by ralph during the iteration)
   CONTEXT_SLUG=""

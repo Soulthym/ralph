@@ -220,6 +220,42 @@ for _ in {1..50}; do
   sleep 0.1
 done
 
+update_status_from_text() {
+  local lower
+  lower="${1,,}"
+  if [[ "$lower" == *"<status>task_complete</status>"* ]]; then
+    STATUS="TASK_COMPLETE"
+  elif [[ "$lower" == *"<status>done</status>"* ]]; then
+    STATUS="DONE"
+  fi
+}
+
+append_text_chunk() {
+  local chunk="$1"
+  if [[ -n "$chunk" ]]; then
+    TEXT_BUFFER+="$chunk"
+    update_status_from_text "$TEXT_BUFFER"
+  fi
+}
+
+flush_text_lines() {
+  local line
+  while [[ "$TEXT_BUFFER" == *$'\n'* ]]; do
+    line="${TEXT_BUFFER%%$'\n'*}"
+    printf "%s\n" "$line"
+    update_status_from_text "$line"
+    TEXT_BUFFER="${TEXT_BUFFER#*$'\n'}"
+  done
+}
+
+flush_text_remaining() {
+  if [[ -n "$TEXT_BUFFER" ]]; then
+    printf "%s\n" "$TEXT_BUFFER"
+    update_status_from_text "$TEXT_BUFFER"
+    TEXT_BUFFER=""
+  fi
+}
+
 # === Generate project description if needed ===
 if [[ ! -f "$DESCRIPTION_FILE" ]] || [[ ! -s "$DESCRIPTION_FILE" ]]; then
   echo "Analyzing codebase to generate project description..."
@@ -311,6 +347,8 @@ while true; do
 
   # Listen for SSE events
   STATUS="UNFINISHED"
+  TEXT_BUFFER=""
+  declare -A PRINTED_PARTS=()
   CONTEXT_DATE=$(date +%Y-%m-%d-%H-%M-%S)
   # Create context file with date-only name, will rename after iteration
   TEMP_CONTEXT_FILE="$ROOT_DIR/.agents/contexts/${CONTEXT_DATE}-context.json"
@@ -330,19 +368,28 @@ while true; do
         PART_SESSION=$(echo "$DATA" | jq -r '.properties.part.sessionID // empty' 2>/dev/null) || continue
 
         if [[ "$PART_SESSION" == "$SESSION_ID" && "$PART_TYPE" == "text" ]]; then
-          HAS_END=$(echo "$DATA" | jq -r '.properties.part.time.end // empty' 2>/dev/null) || continue
-          if [[ -n "$HAS_END" ]]; then
-            TEXT=$(echo "$DATA" | jq -r '.properties.part.text // empty' 2>/dev/null) || continue
-            printf "%s\n" "$TEXT"
-            # Strip whitespace before comparing
-            TEXT_TRIMMED=$(echo "$TEXT" | xargs)
-            if [[ "$TEXT_TRIMMED" == "<status>TASK_COMPLETE</status>" ]]; then
-              STATUS="TASK_COMPLETE"
-            elif [[ "$TEXT_TRIMMED" == "<status>DONE</status>" ]]; then
-              STATUS="DONE"
+          PART_ID=$(echo "$DATA" | jq -r '.properties.part.id // empty' 2>/dev/null) || continue
+          TEXT_DELTA=$(echo "$DATA" | jq -r '.properties.delta // empty' 2>/dev/null) || true
+          if [[ -n "$TEXT_DELTA" ]]; then
+            append_text_chunk "$TEXT_DELTA"
+            flush_text_lines
+          else
+            TEXT=$(echo "$DATA" | jq -r '.properties.part.text // empty' 2>/dev/null) || true
+            if [[ -n "$TEXT" ]]; then
+              if [[ -n "$PART_ID" ]]; then
+                if [[ -z "${PRINTED_PARTS[$PART_ID]+x}" ]]; then
+                  PRINTED_PARTS["$PART_ID"]=1
+                  append_text_chunk "$TEXT"
+                  flush_text_lines
+                fi
+              else
+                append_text_chunk "$TEXT"
+                flush_text_lines
+              fi
             fi
           fi
         elif [[ "$PART_SESSION" == "$SESSION_ID" && "$PART_TYPE" == "tool" ]]; then
+          flush_text_lines
           # Display tool usage for visibility
           TOOL=$(echo "$DATA" | jq -r '.properties.part.tool // empty' 2>/dev/null) || true
           TITLE=$(echo "$DATA" | jq -r '.properties.part.state.title // empty' 2>/dev/null) || true
@@ -353,15 +400,20 @@ while true; do
         fi
       fi
 
+      flush_text_lines
+
       # Session complete
       if [[ "$EVENT_TYPE" == "session.idle" ]]; then
         IDLE_SESSION=$(echo "$DATA" | jq -r '.properties.sessionID // empty' 2>/dev/null) || continue
         if [[ "$IDLE_SESSION" == "$SESSION_ID" ]]; then
+          flush_text_remaining
           break
         fi
       fi
     fi
   done < <(curl -s -N "$BASE_URL/event")
+
+  flush_text_remaining
 
   # Read slug from WIP.md (written by ralph during the iteration)
   CONTEXT_SLUG=""
