@@ -45,8 +45,8 @@ Rules
 - After every meaningful change, run tests if available. Fix any failures before marking a task complete.
 - Commit frequently using conventional commit format (e.g., feat:, fix:, refactor:, docs:, test:, chore:). Each logical change should be its own commit. Do not push. Use --no-gpg-sign when committing.
 - Once your task is complete, pull the dev-auto branch and merge your branch into dev-auto.
-- When you finish a task, remove it from TASKS.md and write a concise summary of what you did in the notes file.
-- Once the TASKS.md has no tasks left, output on a single line: "<status>DONE</status>"
+- When you finish a task: remove it from TASKS.md, write a concise summary in the notes file, then output on a single line: "<status>TASK_COMPLETE</status>"
+- Once the TASKS.md has no tasks left (after completing the final task's notes), output on a single line: "<status>DONE</status>"
 
 Task format (for .agents/TASKS.md)
 ```
@@ -80,18 +80,12 @@ if [[ ! -f "$TASKS_FILE" ]]; then
 EOF
 fi
 
+WIP_FILE="$ROOT_DIR/.agents/WIP.md"
+
 ITERATION=0
 while true; do
   ((ITERATION++)) || true
-  # Read the slug from WIP.md (written by ralph when picking a task)
-  CONTEXT_SLUG=""
-  WIP_FILE="$ROOT_DIR/.agents/WIP.md"
-  if [[ -f "$WIP_FILE" ]]; then
-    CONTEXT_SLUG=$(cat "$WIP_FILE" | xargs)
-  fi
-  if [[ -z "$CONTEXT_SLUG" ]]; then
-    CONTEXT_SLUG="prompt"
-  fi
+
   if [[ -n "$USER_PROMPT" ]]; then
     PROMPT="$(cat "$RALPH_FILE")"$'\n\n'"$(cat "$DESCRIPTION_FILE")"$'\n\n'"$USER_PROMPT"
   else
@@ -100,12 +94,13 @@ while true; do
 
   STATUS="UNFINISHED"
   CONTEXT_DATE=$(date +%Y-%m-%d-%H-%M-%S)
-  CONTEXT_FILE="$ROOT_DIR/.agents/contexts/${CONTEXT_SLUG}-${CONTEXT_DATE}-context.json"
+  # Create context file with date-only name, will rename after iteration
+  TEMP_CONTEXT_FILE="$ROOT_DIR/.agents/contexts/${CONTEXT_DATE}-context.json"
 
   # Run opencode with JSON output to capture full context
   while IFS= read -r line; do
     # Append raw JSON to context file
-    printf "%s\n" "$line" >> "$CONTEXT_FILE"
+    printf "%s\n" "$line" >> "$TEMP_CONTEXT_FILE"
 
     # Parse JSON to extract text for display and status check
     EVENT_TYPE=$(echo "$line" | jq -r '.type // empty' 2>/dev/null) || true
@@ -114,7 +109,9 @@ while true; do
       if [[ -n "$TEXT" ]]; then
         printf "%s\n" "$TEXT"
         TEXT_TRIMMED=$(echo "$TEXT" | xargs)
-        if [[ "$TEXT_TRIMMED" == "<status>DONE</status>" ]]; then
+        if [[ "$TEXT_TRIMMED" == "<status>TASK_COMPLETE</status>" ]]; then
+          STATUS="TASK_COMPLETE"
+        elif [[ "$TEXT_TRIMMED" == "<status>DONE</status>" ]]; then
           STATUS="DONE"
         fi
       fi
@@ -127,6 +124,23 @@ while true; do
       fi
     fi
   done < <(printf "%s" "$PROMPT" | opencode run --format json)
+
+  # Read slug from WIP.md (written by ralph during the iteration)
+  CONTEXT_SLUG=""
+  if [[ -f "$WIP_FILE" ]]; then
+    CONTEXT_SLUG=$(cat "$WIP_FILE" | xargs)
+  fi
+  if [[ -z "$CONTEXT_SLUG" ]]; then
+    CONTEXT_SLUG="unknown"
+  fi
+
+  # Rename context file with correct slug
+  CONTEXT_FILE="$ROOT_DIR/.agents/contexts/${CONTEXT_SLUG}-${CONTEXT_DATE}-context.json"
+  mv "$TEMP_CONTEXT_FILE" "$CONTEXT_FILE"
+
+  # Commit the context file
+  git add "$CONTEXT_FILE"
+  git commit --no-gpg-sign -m "chore: add context ${CONTEXT_SLUG}-${CONTEXT_DATE}-context.json" || true
 
   if [[ "$STATUS" == "DONE" ]]; then
     break
