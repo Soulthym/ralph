@@ -77,7 +77,7 @@ git checkout -b dev-auto
 
 # Run ralph (output to both terminal and log file)
 echo "Running ralph mobile..."
-"$RALPH_SCRIPT" -m "opencode/gpt-5.2-codex" 5 2>&1 | tee "$LOG_FILE"
+"$RALPH_SCRIPT" -m "opencode/grok-code" 5 2>&1 | tee "$LOG_FILE"
 
 # Verify results
 echo ""
