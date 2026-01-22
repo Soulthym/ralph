@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEST_DIR="$SCRIPT_DIR/bash-calc"
-RALPH_SCRIPT="$SCRIPT_DIR/../ralph.sh"
+RALPH_SCRIPT="$SCRIPT_DIR/../ralph-mobile.sh"
 LOG_FILE="$SCRIPT_DIR/bash-calc-test.log"
 
 cleanup() {
@@ -76,8 +76,8 @@ git checkout -b dev
 git checkout -b dev-auto
 
 # Run ralph (output to both terminal and log file)
-echo "Running ralph..."
-"$RALPH_SCRIPT" 5 2>&1 | tee "$LOG_FILE"
+echo "Running ralph mobile..."
+"$RALPH_SCRIPT" -m "opencode/gpt-5.2-codex" 5 2>&1 | tee "$LOG_FILE"
 
 # Verify results
 echo ""
