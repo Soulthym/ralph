@@ -11,8 +11,18 @@ TASKS_FILE="$ROOT_DIR/.agents/TASKS.md"
 mkdir -p "$ROOT_DIR/.agents/notes"
 mkdir -p "$ROOT_DIR/.agents/contexts"
 
+print_prefixed() {
+  local label="$1"
+  local text="$2"
+  local line
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    printf "%s: %s\n" "$label" "$line"
+  done <<< "$text"
+}
+
 if ! command -v jq >/dev/null 2>&1; then
-  echo "jq is required; install jq to run this script." >&2
+  print_prefixed "SYSTEM" "jq is required; install jq to run this script." >&2
   exit 1
 fi
 
@@ -33,7 +43,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --model|-m)
       if [[ $# -lt 2 ]]; then
-        echo "Missing value for $1" >&2
+        print_prefixed "SYSTEM" "Missing value for $1" >&2
         exit 1
       fi
       SELECTED_MODEL="$2"
@@ -105,13 +115,13 @@ select_model() {
   fi
 
   if [[ ${#ordered_models[@]} -eq 0 ]]; then
-    echo "No models available; check opencode configuration." >&2
+    print_prefixed "SYSTEM" "No models available; check opencode configuration." >&2
     exit 1
   fi
 
   selection=$(printf '%s\n' "${ordered_models[@]}" | fzf --prompt="Select model: ")
   if [[ -z "$selection" ]]; then
-    echo "No model selected; exiting." >&2
+    print_prefixed "SYSTEM" "No model selected; exiting." >&2
     exit 1
   fi
   printf '%s' "$selection"
@@ -119,7 +129,7 @@ select_model() {
 
 if [[ -z "$SELECTED_MODEL" ]]; then
   if ! command -v fzf >/dev/null 2>&1; then
-    echo "fzf is required for model selection; install fzf or pass --model to skip the menu." >&2
+    print_prefixed "SYSTEM" "fzf is required for model selection; install fzf or pass --model to skip the menu." >&2
     exit 1
   fi
   SELECTED_MODEL="$(select_model)"
@@ -128,7 +138,7 @@ fi
 MODEL_ARGS=()
 if [[ -n "$SELECTED_MODEL" ]]; then
   if [[ "$MODEL_PROVIDED_BY_ARG" == "false" ]]; then
-    echo "Using model: $SELECTED_MODEL" >&2
+    print_prefixed "SYSTEM" "Using model: $SELECTED_MODEL" >&2
   fi
   MODEL_ARGS=(--model "$SELECTED_MODEL")
 fi
@@ -170,7 +180,7 @@ EOF
 fi
 
 if [[ ! -f "$DESCRIPTION_FILE" ]] || [[ ! -s "$DESCRIPTION_FILE" ]]; then
-  echo "Analyzing codebase to generate project description..."
+  print_prefixed "SYSTEM" "Analyzing codebase to generate project description..."
   DESCRIPTION_PROMPT="Analyze this codebase and write a concise project description (1-2 paragraphs). Include: what the project does, main technologies used, and key components. Output only the description text, nothing else."
   if [[ -n "$USER_PROMPT" ]]; then
     DESCRIPTION_PROMPT="$DESCRIPTION_PROMPT"$'\n\n'"Additional context from user: $USER_PROMPT"
@@ -193,8 +203,8 @@ fi
 WIP_FILE="$ROOT_DIR/.agents/WIP.md"
 
 update_status_from_text() {
-  local lower
-  lower="${1,,}"
+  local lower="$1"
+  lower="${lower,,}"
   if [[ "$lower" == *"<status>task_complete</status>"* ]]; then
     STATUS="TASK_COMPLETE"
   elif [[ "$lower" == *"<status>done</status>"* ]]; then
@@ -206,7 +216,11 @@ append_text_chunk() {
   local chunk="$1"
   if [[ -n "$chunk" ]]; then
     TEXT_BUFFER+="$chunk"
-    update_status_from_text "$TEXT_BUFFER"
+    STATUS_BUFFER+="$chunk"
+    if [[ ${#STATUS_BUFFER} -gt 512 ]]; then
+      STATUS_BUFFER="${STATUS_BUFFER: -512}"
+    fi
+    update_status_from_text "$STATUS_BUFFER"
   fi
 }
 
@@ -214,16 +228,14 @@ flush_text_lines() {
   local line
   while [[ "$TEXT_BUFFER" == *$'\n'* ]]; do
     line="${TEXT_BUFFER%%$'\n'*}"
-    printf "%s\n" "$line"
-    update_status_from_text "$line"
+    print_prefixed "AGENT" "$line"
     TEXT_BUFFER="${TEXT_BUFFER#*$'\n'}"
   done
 }
 
 flush_text_remaining() {
   if [[ -n "$TEXT_BUFFER" ]]; then
-    printf "%s\n" "$TEXT_BUFFER"
-    update_status_from_text "$TEXT_BUFFER"
+    print_prefixed "AGENT" "$TEXT_BUFFER"
     TEXT_BUFFER=""
   fi
 }
@@ -238,8 +250,20 @@ while true; do
     PROMPT="$(cat "$RALPH_FILE")"$'\n\n'"$(cat "$DESCRIPTION_FILE")"$'\n\n'"$(cat "$TASKS_FILE")"
   fi
 
+  SYSTEM_CONTENT="$(cat "$RALPH_FILE")"$'\n\n'"$(cat "$DESCRIPTION_FILE")"
+  if [[ -z "$USER_PROMPT" ]]; then
+    SYSTEM_CONTENT+=$'\n\n'"$(cat "$TASKS_FILE")"
+  fi
+  print_prefixed "SYSTEM" "$SYSTEM_CONTENT"
+  if [[ -n "$USER_PROMPT" ]]; then
+    print_prefixed "USER" "$USER_PROMPT"
+  else
+    print_prefixed "USER" ""
+  fi
+
   STATUS="UNFINISHED"
   TEXT_BUFFER=""
+  STATUS_BUFFER=""
   declare -A PRINTED_PARTS=()
   CONTEXT_DATE=$(date +%Y-%m-%d-%H-%M-%S)
   # Create context file with date-only name, will rename after iteration
@@ -278,8 +302,28 @@ while true; do
       # Display tool usage for visibility
       TOOL=$(echo "$line" | jq -r '.part.tool // empty' 2>/dev/null) || true
       TITLE=$(echo "$line" | jq -r '.part.state.title // empty' 2>/dev/null) || true
+      COMMAND=$(echo "$line" | jq -r '.part.state.input.command // empty' 2>/dev/null) || true
+      TOOL_TITLE="$TITLE"
+      if [[ -z "$TOOL_TITLE" && -n "$COMMAND" ]]; then
+        TOOL_TITLE="$COMMAND"
+      fi
       if [[ -n "$TOOL" ]]; then
-        printf "[%s] %s\n" "$TOOL" "$TITLE"
+        if [[ -n "$TOOL_TITLE" ]]; then
+          print_prefixed "AGENT" "tool $TOOL $TOOL_TITLE"
+        else
+          print_prefixed "AGENT" "tool $TOOL"
+        fi
+      fi
+      TOOL_STATUS=$(echo "$line" | jq -r '.part.state.status // empty' 2>/dev/null) || true
+      TOOL_OUTPUT=$(echo "$line" | jq -r '.part.state.output // empty' 2>/dev/null) || true
+      TOOL_ERROR=$(echo "$line" | jq -r '.part.state.error // empty' 2>/dev/null) || true
+      if [[ "$TOOL_STATUS" == "completed" ]]; then
+        if [[ -n "$TOOL_OUTPUT" ]]; then
+          print_prefixed "TOOL" "$TOOL_OUTPUT"
+        fi
+        if [[ -n "$TOOL_ERROR" ]]; then
+          print_prefixed "TOOL" "$TOOL_ERROR"
+        fi
       fi
     fi
     flush_text_lines
@@ -309,7 +353,7 @@ while true; do
   fi
 
   if [[ "$ITERATION" -ge "$MAX_ITERATIONS" ]]; then
-    echo "Reached maximum iterations ($MAX_ITERATIONS)"
+    print_prefixed "SYSTEM" "Reached maximum iterations ($MAX_ITERATIONS)"
     break
   fi
 done

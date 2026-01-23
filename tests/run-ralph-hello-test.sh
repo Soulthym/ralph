@@ -42,8 +42,25 @@ fi
 rm -rf "$TEST_DIR"
 mkdir -p "$TEST_DIR"
 
+mkdir -p "$TEST_DIR/.agents/notes"
+mkdir -p "$TEST_DIR/.agents/contexts"
+
 cat > "$TEST_DIR/README.md" << 'EOF'
 # ralph
+EOF
+
+cat > "$TEST_DIR/.agents/DESCRIPTION.md" << 'EOF'
+Minimal test repo for ralph hello prompt.
+EOF
+
+cat > "$TEST_DIR/.agents/TASKS.md" << 'EOF'
+# TASKS.md
+# Task format:
+# Task: <summary>
+# Slug: <slug-for-notes-file>
+# Notes:
+# - .agents/notes/<slug>-notes.md
+# (blank line between tasks)
 EOF
 
 # Initialize isolated git repo
